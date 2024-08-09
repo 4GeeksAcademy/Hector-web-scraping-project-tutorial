@@ -8,13 +8,12 @@ import seaborn as sns
 import pandas as pd
 
 # Crear los datos de HTML de la pagina web proporcionada
-url = "https://www.macrotrends.net/stocks/charts/TSLA/tesla/revenue"
-#url = 'https://ycharts.com/companies/TSLA/revenues'
+url = 'https://ycharts.com/companies/TSLA/revenues'
 data = requests.get(url)
 
 # Comprobar si se extra informacion, en caso contrario acceder de manera anonima
 if data.status_code != 200:
-    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36"}
+    headers = {"User-Agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
     data = requests.get(url, headers = headers)
     
 data_html = data.text
@@ -25,19 +24,33 @@ soup = BeautifulSoup(data_html,"html.parser")
 tablas = soup.find_all("table")
 
 #Crear un data frame de la tabal "Tesla Quarterly Revenue"
-for i, tabla in enumerate(tablas):
-    if 'Tesla Quarterly Revenue' in str(tabla):
-    #if 'Date' in str(tabla):
-        id = i
-        break
-print(tablas[id])
-#Con la tabla encontrada se realizara el data frame con las ganancias por fechas ademas se modificara su contenido
 df= pd.DataFrame(columns = ['Fecha', 'Ganancia'])
-for fila in tablas[id].tbody.find_all("tr"):
-    colum=fila.find_all('td')
-    if colum!=[]:
-        Fecha=colum[0].text
-        Ganancia=colum[1].text.replace("$", "").replace(",", "")
-        df=pd.concat([df, pd.DataFrame({"Fecha": Fecha,"Ganancia": Ganancia}, index = [0])], ignore_index = True)
+for i, tabla in enumerate(tablas):
+    if 'thead' in str(tabla):
+        for fila in tablas[i].find_all("tr")[1:]:
+            colum=fila.find_all('td')
+            Fecha = colum[0].get_text(strip=True)
+            Ganancia = int(colum[1].get_text(strip=True).replace('.','').replace('B','000000000').replace('M','000000'))
+            df=pd.concat([df, pd.DataFrame({"Fecha": Fecha,"Ganancia": Ganancia}, index = [0])], ignore_index = True)
 
-print(df)
+
+#Modificacion de la columa de Fecha
+df['Fecha'] = pd.to_datetime(df['Fecha']) # Para convertir la columna Date a un objeto datetime.
+df['Fecha'] = df['Fecha'].dt.strftime('%d-%m-%Y')
+
+#Realizamos la conexion
+'''
+connection = sqlite3.connect("Tabla.db")
+cursor = connection.cursor()
+cursor.execute("""CREATE TABLE Ganancias (Fecha, Ganancias)""")
+tuples = list(df.to_records(index = False))
+tuples[:5]
+cursor.executemany("INSERT INTO Ganancias VALUES (?,?)", tuples)
+connection.commit()
+'''
+
+#Visualizacion 
+grafica_plot = sns.lineplot(data = df, x = "Fecha", y = "Ganancia")
+fig = grafica_plot.get_figure()
+fig.savefig("grafica_plot.png")
+
